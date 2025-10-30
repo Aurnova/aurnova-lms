@@ -4,7 +4,28 @@ This repository provides a Docker Compose setup to run [Canvas LMS](https://gith
 
 ### Deploy to Google Cloud
 
-#### Automated Deployment (Recommended)
+#### Quick Setup with gcloud CLI (Recommended)
+Automated setup using gcloud CLI:
+
+```bash
+# 1. Clone and run setup script
+git clone https://github.com/Aurnova/aurnova-lms.git
+cd aurnova-lms
+./setup-gcp.sh --project-id YOUR_PROJECT_ID
+
+# 2. For subsequent deployments
+./scripts/quick-deploy.sh
+```
+
+The setup script will:
+- Enable required GCP APIs
+- Create service account and permissions
+- Generate SSH keys
+- Deploy infrastructure with Terraform
+- Deploy Canvas LMS application
+- Provide GitHub Actions setup instructions
+
+#### GitHub Actions (Automated)
 This repository includes GitHub Actions for automated deployment:
 
 1. **Infrastructure**: Provisions GCE VM with Terraform
@@ -12,10 +33,9 @@ This repository includes GitHub Actions for automated deployment:
 3. **Update**: Daily checks and updates for new versions
 
 **Setup**:
-1. Configure required [GitHub Secrets](.github/SECRETS.md)
-2. Run "Infrastructure" workflow to provision VM
-3. Run "Deploy Application" workflow to deploy Canvas
-4. Updates run automatically daily
+1. Run `./setup-gcp.sh` first to create initial infrastructure
+2. Configure required [GitHub Secrets](.github/SECRETS.md)
+3. Enable GitHub Actions workflows for automated updates
 
 #### Manual Deployment
 See `deploy/gcp/README.md` for manual Terraform-based provisioning and deployment commands.
