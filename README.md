@@ -11,7 +11,7 @@ Automated setup using gcloud CLI:
 # 1. Clone and run setup script
 git clone https://github.com/Aurnova/aurnova-lms.git
 cd aurnova-lms
-./setup-gcp.sh --project-id YOUR_PROJECT_ID
+./setup-gcp.sh --project-id YOUR_PROJECT_ID --domain lms.syzygyx.com --route53-hosted-zone-id YOUR_HOSTED_ZONE_ID
 
 # 2. For subsequent deployments
 ./scripts/quick-deploy.sh
@@ -24,6 +24,8 @@ The setup script will:
 - Deploy infrastructure with Terraform
 - Deploy Canvas LMS application
 - Provide GitHub Actions setup instructions
+
+DNS (AWS Route 53): If you pass both `--domain` and `--route53-hosted-zone-id`, the script will automatically upsert an A record pointing your domain to the VM's public IP using AWS Route 53.
 
 #### GitHub Actions (Automated)
 This repository includes GitHub Actions for automated deployment:

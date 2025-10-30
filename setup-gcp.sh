@@ -19,6 +19,8 @@ INSTANCE_NAME="aurnova-lms"
 BUCKET_NAME=""
 SERVICE_ACCOUNT_NAME="aurnova-lms-sa"
 SSH_KEY_NAME="aurnova-lms-key"
+DOMAIN=""
+ROUTE53_HOSTED_ZONE_ID=""
 
 # Function to print colored output
 print_status() {
@@ -255,8 +257,9 @@ deploy_application() {
     local encryption_key=$(openssl rand -hex 32)
     
     # Create production .env
+    local domain_value="${DOMAIN:-localhost}"
     cat > .env << EOF
-CANVAS_LMS_DOMAIN=localhost
+CANVAS_LMS_DOMAIN=${domain_value}
 CANVAS_LMS_TIME_ZONE=UTC
 CANVAS_LMS_ACCOUNT_NAME=Aurnova University
 CANVAS_LMS_ADMIN_EMAIL=admin@aurnova.com
@@ -287,6 +290,9 @@ EOF
 EOF
     
     print_success "Application deployed successfully!"
+    if [ -n "$DOMAIN" ]; then
+      print_success "Canvas LMS will be available at: http://$DOMAIN (after DNS)"
+    fi
     print_success "Canvas LMS is available at: http://$INSTANCE_IP:8080"
     print_success "Admin email: admin@aurnova.com"
     print_success "Admin password: changeme123"
@@ -346,6 +352,14 @@ main() {
                 BUCKET_NAME="$2"
                 shift 2
                 ;;
+            --domain)
+                DOMAIN="$2"
+                shift 2
+                ;;
+            --route53-hosted-zone-id)
+                ROUTE53_HOSTED_ZONE_ID="$2"
+                shift 2
+                ;;
             --help)
                 echo "Usage: $0 [OPTIONS]"
                 echo
@@ -355,6 +369,8 @@ main() {
                 echo "  --zone ZONE          GCP zone (default: us-central1-a)"
                 echo "  --instance-name NAME Instance name (default: aurnova-lms)"
                 echo "  --bucket-name NAME   Terraform state bucket name"
+                echo "  --domain FQDN        Public domain (e.g., lms.example.com)"
+                echo "  --route53-hosted-zone-id Z  Route 53 Hosted Zone ID (optional)"
                 echo "  --help               Show this help message"
                 exit 0
                 ;;
@@ -382,6 +398,16 @@ main() {
     create_terraform_vars
     deploy_infrastructure
     deploy_application
+
+    # Optionally update Route 53 DNS
+    if [ -n "$ROUTE53_HOSTED_ZONE_ID" ] && [ -n "$DOMAIN" ]; then
+      if command -v aws >/dev/null 2>&1; then
+        print_status "Updating Route 53 A record $DOMAIN -> $INSTANCE_IP"
+        ./scripts/route53-set-record.sh --hosted-zone-id "$ROUTE53_HOSTED_ZONE_ID" --record-name "$DOMAIN" --ttl 60 || print_warning "Route 53 update failed; configure DNS manually."
+      else
+        print_warning "aws CLI not found. Skipping Route 53 update."
+      fi
+    fi
     display_github_setup
     
     print_success "Setup completed successfully! ??"
