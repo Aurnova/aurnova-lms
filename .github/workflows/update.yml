@@ -112,16 +112,16 @@ jobs:
         echo "Performing health check..."
         
         for i in {1..20}; do
-          if curl -f -s "http://$IP:8080" > /dev/null; then
-            echo "? Canvas is healthy after update"
+          if curl -f -s "http://$IP" > /dev/null; then
+            echo "Canvas is healthy after update"
             break
           fi
           echo "Health check attempt $i/20..."
           sleep 15
         done
         
-        if ! curl -f -s "http://$IP:8080" > /dev/null; then
-          echo "? Health check failed after update"
+        if ! curl -f -s "http://$IP" > /dev/null; then
+          echo "Health check failed after update"
           ssh ubuntu@$IP 'cd /opt/aurnova-lms && sudo docker compose logs --tail=100'
           exit 1
         fi
@@ -130,8 +130,8 @@ jobs:
       run: |
         IP="${{ steps.get_ip.outputs.instance_ip }}"
         if [ "${{ steps.check_updates.outputs.has_updates }}" == "true" ]; then
-          echo "?? Application updated successfully!"
-          echo "Canvas LMS is available at: http://$IP:8080"
+          echo "Application updated successfully!"
+          echo "Canvas LMS is available at: http://$IP"
         else
-          echo "?? No updates available. Application is up to date."
+          echo "No updates available. Application is up to date."
         fi

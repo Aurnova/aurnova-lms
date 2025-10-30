@@ -58,7 +58,7 @@ See `deploy/gcp/README.md` for manual Terraform-based provisioning and deploymen
    ```bash
    docker compose up -d
    ```
-3. Access Canvas at http://localhost:8080
+3. Access Canvas locally at http://localhost:8080 (or http://localhost)
 
 The first boot may run initializations/migrations. Watch logs:
 ```bash

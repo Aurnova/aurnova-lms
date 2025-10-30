@@ -36,7 +36,7 @@ This deployment uses a single Compute Engine VM with Docker Compose to run Canva
    ```
 
 5. Access Canvas:
-   - http://IP_ADDRESS:8080 (or map a DNS A-record to the IP)
+   - http://IP_ADDRESS (port 80) or map a DNS A-record to the IP and use your domain
 
 ## TLS and Domain (optional)
 - Put a reverse proxy (NGINX/Traefik) in front on the same VM or in your edge/load balancer to terminate TLS for your domain.

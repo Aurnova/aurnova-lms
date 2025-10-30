@@ -113,16 +113,16 @@ jobs:
         echo "Waiting for Canvas to start..."
         
         for i in {1..30}; do
-          if curl -f -s "http://$IP:8080" > /dev/null; then
-            echo "? Canvas is responding at http://$IP:8080"
+          if curl -f -s "http://$IP" > /dev/null; then
+            echo "Canvas is responding at http://$IP"
             break
           fi
           echo "Attempt $i/30: Canvas not ready yet..."
           sleep 10
         done
         
-        if ! curl -f -s "http://$IP:8080" > /dev/null; then
-          echo "? Canvas failed to start after 5 minutes"
+        if ! curl -f -s "http://$IP" > /dev/null; then
+          echo "Canvas failed to start after 5 minutes"
           ssh ubuntu@$IP 'cd /opt/aurnova-lms && sudo docker compose logs --tail=100'
           exit 1
         fi
@@ -130,7 +130,7 @@ jobs:
     - name: Deployment summary
       run: |
         IP="${{ steps.get_ip.outputs.instance_ip }}"
-        echo "?? Deployment successful!"
-        echo "Canvas LMS is available at: http://$IP:8080"
+        echo "Deployment successful!"
+        echo "Canvas LMS is available at: http://$IP"
         echo "Admin email: ${{ secrets.CANVAS_LMS_ADMIN_EMAIL || 'admin@localhost' }}"
         echo "Admin password: ${{ secrets.CANVAS_LMS_ADMIN_PASSWORD || 'changeme123' }}"

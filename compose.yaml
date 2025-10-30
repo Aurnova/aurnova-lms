@@ -49,7 +49,8 @@ services:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
     ports:
-      - "8080:80"
+      - "80:80"     # production/domain access without port
+      - "8080:80"   # optional local access
     volumes:
       - canvasdata:/var/canvas
 

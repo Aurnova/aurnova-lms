@@ -293,7 +293,7 @@ EOF
     if [ -n "$DOMAIN" ]; then
       print_success "Canvas LMS will be available at: http://$DOMAIN (after DNS)"
     fi
-    print_success "Canvas LMS is available at: http://$INSTANCE_IP:8080"
+    print_success "Canvas LMS is available at: http://$INSTANCE_IP"
     print_success "Admin email: admin@aurnova.com"
     print_success "Admin password: changeme123"
 }

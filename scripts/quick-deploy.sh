@@ -88,7 +88,7 @@ deploy_app() {
 EOF
     
     print_success "Application deployed successfully!"
-    print_success "Canvas LMS is available at: http://$instance_ip:8080"
+    print_success "Canvas LMS is available at: http://$instance_ip"
 }
 
 # Health check
@@ -98,15 +98,15 @@ health_check() {
     print_status "Performing health check..."
     
     for i in {1..30}; do
-        if curl -f -s "http://$instance_ip:8080" > /dev/null 2>&1; then
-            print_success "? Canvas is responding at http://$instance_ip:8080"
+        if curl -f -s "http://$instance_ip" > /dev/null 2>&1; then
+            print_success "Canvas is responding at http://$instance_ip"
             return 0
         fi
         print_status "Attempt $i/30: Canvas not ready yet..."
         sleep 10
     done
     
-    print_error "? Canvas failed to start after 5 minutes"
+    print_error "Canvas failed to start after 5 minutes"
     return 1
 }
 
