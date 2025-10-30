@@ -72,26 +72,20 @@ if [[ "$VERIFIED_PROJECT" != "$PROJECT_ID" ]]; then
 fi
 
 info "Linking billing account: $BILLING_ACCOUNT to project: $PROJECT_ID"
-# Use full project format to avoid confusion
-gcloud beta billing projects link "projects/$PROJECT_ID" \
-  --billing-account "$BILLING_ACCOUNT" || {
-  err "Failed to link billing. Trying alternative method..."
-  # Alternative: use project number instead
-  PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)" 2>/dev/null || echo "")
-  if [[ -n "$PROJECT_NUMBER" ]]; then
-    info "Using project number: $PROJECT_NUMBER"
-    gcloud beta billing projects link "$PROJECT_NUMBER" \
-      --billing-account "$BILLING_ACCOUNT" || {
-      err "Billing link failed. You may need to link manually in Console:"
-      err "https://console.cloud.google.com/billing/linkedaccount?project=$PROJECT_ID"
-      exit 1
-    }
-  else
-    err "Could not get project number. Please link billing manually:"
-    err "https://console.cloud.google.com/billing/linkedaccount?project=$PROJECT_ID"
-    exit 1
-  fi
-}
+info "Note: If this fails due to permissions, you can link manually in the Console"
+
+# Try to link billing - if it fails, provide manual instructions
+if ! gcloud beta billing projects link "$PROJECT_ID" \
+  --billing-account "$BILLING_ACCOUNT" 2>&1; then
+  
+  warn "Automatic billing link failed. This often happens due to API permissions."
+  warn "You can either:"
+  warn "1. Link manually: https://console.cloud.google.com/billing/linkedaccount?project=$PROJECT_ID"
+  warn "2. Or run this command after granting permissions:"
+  warn "   gcloud beta billing projects link $PROJECT_ID --billing-account $BILLING_ACCOUNT"
+  echo
+  read -p "Press Enter to continue with API setup (you can link billing later) or Ctrl+C to stop: " || exit 1
+fi
 
 succ "Project created and selected: $PROJECT_ID"
 
