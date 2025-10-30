@@ -4,6 +4,22 @@ This directory contains utility scripts for managing the Aurnova LMS deployment.
 
 ## Scripts
 
+### `create-gcp-project.sh`
+Creates a new GCP project, links a billing account, selects it, and enables common APIs.
+
+```bash
+./scripts/create-gcp-project.sh \
+  --project-id aurnova-lms-1234 \
+  --project-name "Aurnova LMS" \
+  --billing-account ABCDEF-ABCDEF-ABCDEF \
+  --org-id 123456789012   # optional if you have an org
+```
+
+Then run:
+```bash
+./setup-gcp.sh --project-id aurnova-lms-1234 --domain lms.syzygyx.com --route53-hosted-zone-id Z3NYTS7HNUXA87
+```
+
 ### `generate-secrets.sh`
 Generates secure secrets for Canvas LMS deployment.
 
