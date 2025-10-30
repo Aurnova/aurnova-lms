@@ -1,0 +1,77 @@
+version: "3.9"
+
+x-db-env: &db_env
+  POSTGRES_DB: canvas
+  POSTGRES_USER: canvas
+  POSTGRES_PASSWORD: canvaspassword
+
+services:
+  postgres:
+    image: postgres:13
+    restart: unless-stopped
+    environment:
+      <<: *db_env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+
+  canvas-web:
+    image: ghcr.io/instructure/canvas-lms:stable
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://canvas:canvaspassword@postgres:5432/canvas
+      REDIS_URL: redis://redis:6379/0
+      # Set these in .env; fallback values shown for local dev
+      RAILS_ENV: production
+      CANVAS_LMS_DOMAIN: ${CANVAS_LMS_DOMAIN:-localhost}
+      CANVAS_LMS_TIME_ZONE: ${CANVAS_LMS_TIME_ZONE:-UTC}
+      CANVAS_LMS_ACCOUNT_NAME: ${CANVAS_LMS_ACCOUNT_NAME:-Aurnova University}
+      CANVAS_LMS_ADMIN_EMAIL: ${CANVAS_LMS_ADMIN_EMAIL:-admin@localhost}
+      CANVAS_LMS_ADMIN_PASSWORD: ${CANVAS_LMS_ADMIN_PASSWORD:-changeme123}
+      CANVAS_LMS_ADMIN_NAME: ${CANVAS_LMS_ADMIN_NAME:-Admin}
+      # Secret key and encryption key should be set in .env
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    ports:
+      - "8080:80"
+    volumes:
+      - canvasdata:/var/canvas
+
+  canvas-jobs:
+    image: ghcr.io/instructure/canvas-lms:stable
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://canvas:canvaspassword@postgres:5432/canvas
+      REDIS_URL: redis://redis:6379/0
+      RAILS_ENV: production
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+    command: ["bundle", "exec", "script/delayed_job", "run"]
+    volumes:
+      - canvasdata:/var/canvas
+
+volumes:
+  pgdata:
+  redisdata:
+  canvasdata:

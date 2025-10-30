@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/Users/danielmcshan/GitHub/aurnova-lms/logs/.3e00a8f25d0854bea255b7f0d85ff0ac0a59974f-audit.json",
+    "files": [
+        {
+            "date": 1761844725996,
+            "name": "/Users/danielmcshan/GitHub/aurnova-lms/logs/mcp-puppeteer-2025-10-30.log",
+            "hash": "de5ebb3f4845781e63dca41eeca8b62f8b57cc1ab7eb92046622f2464b1ebbbb"
+        }
+    ],
+    "hashType": "sha256"
+}
