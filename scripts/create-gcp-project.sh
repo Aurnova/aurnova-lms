@@ -18,6 +18,7 @@ BILLING_ACCOUNT=""
 err() { echo "[ERROR] $1" >&2; }
 info() { echo "[INFO]  $1"; }
 succ() { echo "[OK]   $1"; }
+warn() { echo "[WARN]  $1"; }
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -50,25 +51,38 @@ fi
 
 gcloud "${CREATE_ARGS[@]}"
 
-info "Linking billing account: $BILLING_ACCOUNT"
-gcloud beta billing projects link "$PROJECT_ID" --billing-account "$BILLING_ACCOUNT"
-
-info "Setting project in gcloud config"
+info "Setting project in gcloud config (before other operations)"
 gcloud config set project "$PROJECT_ID"
+
+info "Linking billing account: $BILLING_ACCOUNT"
+gcloud beta billing projects link "$PROJECT_ID" \
+  --billing-account "$BILLING_ACCOUNT" \
+  --project "$PROJECT_ID" || {
+  err "Failed to link billing. You may need to enable billing API first."
+  err "Trying to enable billing API..."
+  gcloud services enable cloudbilling.googleapis.com --project "$PROJECT_ID" || true
+  sleep 2
+  gcloud beta billing projects link "$PROJECT_ID" \
+    --billing-account "$BILLING_ACCOUNT" \
+    --project "$PROJECT_ID"
+}
 
 succ "Project created and selected: $PROJECT_ID"
 
-info "Enable common APIs"
+info "Enabling common APIs (explicitly for $PROJECT_ID)"
 APIS=(
   compute.googleapis.com
   iam.googleapis.com
   cloudresourcemanager.googleapis.com
   serviceusage.googleapis.com
   storage.googleapis.com
+  cloudbilling.googleapis.com
 )
 for api in "${APIS[@]}"; do
   info "Enabling $api"
-  gcloud services enable "$api" --quiet || true
+  gcloud services enable "$api" --project "$PROJECT_ID" --quiet || {
+    warn "Failed to enable $api (may already be enabled or require permissions)"
+  }
 done
 
 succ "All done. Next: run ./setup-gcp.sh --project-id $PROJECT_ID --domain your.domain"
