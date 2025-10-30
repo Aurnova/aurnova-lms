@@ -3,7 +3,22 @@
 This repository provides a Docker Compose setup to run [Canvas LMS](https://github.com/instructure/canvas-lms) with PostgreSQL and Redis.
 
 ### Deploy to Google Cloud
-See `deploy/gcp/README.md` for Terraform-based provisioning of a Compute Engine VM with Docker Compose, and commands to rsync this repo and start services. Use `production.env.example` as a starting point for `.env`.
+
+#### Automated Deployment (Recommended)
+This repository includes GitHub Actions for automated deployment:
+
+1. **Infrastructure**: Provisions GCE VM with Terraform
+2. **Deploy**: Deploys Canvas LMS application  
+3. **Update**: Daily checks and updates for new versions
+
+**Setup**:
+1. Configure required [GitHub Secrets](.github/SECRETS.md)
+2. Run "Infrastructure" workflow to provision VM
+3. Run "Deploy Application" workflow to deploy Canvas
+4. Updates run automatically daily
+
+#### Manual Deployment
+See `deploy/gcp/README.md` for manual Terraform-based provisioning and deployment commands.
 
 ## Prerequisites
 - Docker and Docker Compose v2

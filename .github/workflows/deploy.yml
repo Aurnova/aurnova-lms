@@ -1,0 +1,136 @@
+name: Deploy Application
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+  push:
+    branches: [main]
+    paths-ignore: ['deploy/gcp/**']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Configure GCP credentials
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      
+    - name: Get instance IP
+      id: get_ip
+      run: |
+        cd deploy/gcp
+        terraform init -backend=false
+        terraform workspace select default || terraform workspace new default
+        IP=$(terraform output -raw instance_ip 2>/dev/null || echo "")
+        if [ -z "$IP" ]; then
+          echo "No instance IP found. Run infrastructure workflow first."
+          exit 1
+        fi
+        echo "instance_ip=$IP" >> $GITHUB_OUTPUT
+        echo "Instance IP: $IP"
+        
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ steps.get_ip.outputs.instance_ip }} >> ~/.ssh/known_hosts
+        
+    - name: Generate secrets
+      id: secrets
+      run: |
+        if [ -z "${{ secrets.SECRET_KEY_BASE }}" ]; then
+          SECRET_KEY_BASE=$(openssl rand -hex 64)
+          echo "Generated new SECRET_KEY_BASE"
+        else
+          SECRET_KEY_BASE="${{ secrets.SECRET_KEY_BASE }}"
+        fi
+        
+        if [ -z "${{ secrets.ENCRYPTION_KEY }}" ]; then
+          ENCRYPTION_KEY=$(openssl rand -hex 32)
+          echo "Generated new ENCRYPTION_KEY"
+        else
+          ENCRYPTION_KEY="${{ secrets.ENCRYPTION_KEY }}"
+        fi
+        
+        echo "secret_key_base=$SECRET_KEY_BASE" >> $GITHUB_OUTPUT
+        echo "encryption_key=$ENCRYPTION_KEY" >> $GITHUB_OUTPUT
+        
+    - name: Create production .env
+      run: |
+        cat > .env << EOF
+        CANVAS_LMS_DOMAIN=${{ secrets.CANVAS_LMS_DOMAIN || 'localhost' }}
+        CANVAS_LMS_TIME_ZONE=${{ secrets.CANVAS_LMS_TIME_ZONE || 'UTC' }}
+        CANVAS_LMS_ACCOUNT_NAME=${{ secrets.CANVAS_LMS_ACCOUNT_NAME || 'Aurnova University' }}
+        CANVAS_LMS_ADMIN_EMAIL=${{ secrets.CANVAS_LMS_ADMIN_EMAIL || 'admin@localhost' }}
+        CANVAS_LMS_ADMIN_PASSWORD=${{ secrets.CANVAS_LMS_ADMIN_PASSWORD || 'changeme123' }}
+        CANVAS_LMS_ADMIN_NAME=${{ secrets.CANVAS_LMS_ADMIN_NAME || 'Admin' }}
+        SECRET_KEY_BASE=${{ steps.secrets.outputs.secret_key_base }}
+        ENCRYPTION_KEY=${{ steps.secrets.outputs.encryption_key }}
+        EOF
+        
+    - name: Deploy to instance
+      run: |
+        IP="${{ steps.get_ip.outputs.instance_ip }}"
+        
+        # Copy files to instance
+        rsync -avz --delete \
+          --exclude='.git' \
+          --exclude='.github' \
+          --exclude='deploy/gcp/.terraform' \
+          --exclude='deploy/gcp/terraform.tfstate*' \
+          . ubuntu@$IP:/opt/aurnova-lms/
+          
+        # Deploy application
+        ssh ubuntu@$IP << 'EOF'
+          cd /opt/aurnova-lms
+          sudo docker compose pull
+          sudo docker compose down || true
+          sudo docker compose up -d
+          sudo docker compose logs --tail=50
+        EOF
+        
+    - name: Health check
+      run: |
+        IP="${{ steps.get_ip.outputs.instance_ip }}"
+        echo "Waiting for Canvas to start..."
+        
+        for i in {1..30}; do
+          if curl -f -s "http://$IP:8080" > /dev/null; then
+            echo "? Canvas is responding at http://$IP:8080"
+            break
+          fi
+          echo "Attempt $i/30: Canvas not ready yet..."
+          sleep 10
+        done
+        
+        if ! curl -f -s "http://$IP:8080" > /dev/null; then
+          echo "? Canvas failed to start after 5 minutes"
+          ssh ubuntu@$IP 'cd /opt/aurnova-lms && sudo docker compose logs --tail=100'
+          exit 1
+        fi
+        
+    - name: Deployment summary
+      run: |
+        IP="${{ steps.get_ip.outputs.instance_ip }}"
+        echo "?? Deployment successful!"
+        echo "Canvas LMS is available at: http://$IP:8080"
+        echo "Admin email: ${{ secrets.CANVAS_LMS_ADMIN_EMAIL || 'admin@localhost' }}"
+        echo "Admin password: ${{ secrets.CANVAS_LMS_ADMIN_PASSWORD || 'changeme123' }}"

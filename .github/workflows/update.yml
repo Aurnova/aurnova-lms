@@ -1,0 +1,137 @@
+name: Update Application
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC to check for updates
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Configure GCP credentials
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      
+    - name: Get instance IP
+      id: get_ip
+      run: |
+        cd deploy/gcp
+        terraform init -backend=false
+        IP=$(terraform output -raw instance_ip 2>/dev/null || echo "")
+        if [ -z "$IP" ]; then
+          echo "No instance IP found. Infrastructure may not be deployed."
+          exit 1
+        fi
+        echo "instance_ip=$IP" >> $GITHUB_OUTPUT
+        echo "Instance IP: $IP"
+        
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ steps.get_ip.outputs.instance_ip }} >> ~/.ssh/known_hosts
+        
+    - name: Check for updates
+      id: check_updates
+      run: |
+        IP="${{ steps.get_ip.outputs.instance_ip }}"
+        
+        # Get current image tags
+        CURRENT_WEB=$(ssh ubuntu@$IP 'cd /opt/aurnova-lms && sudo docker compose images canvas-web --format "{{.Tag}}" | head -1')
+        CURRENT_JOBS=$(ssh ubuntu@$IP 'cd /opt/aurnova-lms && sudo docker compose images canvas-jobs --format "{{.Tag}}" | head -1')
+        
+        echo "Current web image: $CURRENT_WEB"
+        echo "Current jobs image: $CURRENT_JOBS"
+        
+        # Pull latest images to check for updates
+        ssh ubuntu@$IP 'cd /opt/aurnova-lms && sudo docker compose pull'
+        
+        # Get new image tags
+        NEW_WEB=$(ssh ubuntu@$IP 'cd /opt/aurnova-lms && sudo docker compose images canvas-web --format "{{.Tag}}" | head -1')
+        NEW_JOBS=$(ssh ubuntu@$IP 'cd /opt/aurnova-lms && sudo docker compose images canvas-jobs --format "{{.Tag}}" | head -1')
+        
+        echo "New web image: $NEW_WEB"
+        echo "New jobs image: $NEW_JOBS"
+        
+        if [ "$CURRENT_WEB" != "$NEW_WEB" ] || [ "$CURRENT_JOBS" != "$NEW_JOBS" ]; then
+          echo "Updates available!"
+          echo "has_updates=true" >> $GITHUB_OUTPUT
+        else
+          echo "No updates available."
+          echo "has_updates=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Deploy updates
+      if: steps.check_updates.outputs.has_updates == 'true'
+      run: |
+        IP="${{ steps.get_ip.outputs.instance_ip }}"
+        
+        echo "Deploying updates..."
+        ssh ubuntu@$IP << 'EOF'
+          cd /opt/aurnova-lms
+          
+          # Create backup of current state
+          sudo docker compose ps > backup-status.txt
+          sudo docker compose logs --tail=100 > backup-logs.txt
+          
+          # Deploy updates
+          sudo docker compose down
+          sudo docker compose up -d
+          
+          # Wait for services to be healthy
+          sleep 30
+          
+          # Check if services are running
+          if sudo docker compose ps | grep -q "Up"; then
+            echo "? Update successful"
+            sudo docker compose logs --tail=20
+          else
+            echo "? Update failed, rolling back..."
+            sudo docker compose down
+            sudo docker compose up -d
+            exit 1
+          fi
+        EOF
+        
+    - name: Health check after update
+      if: steps.check_updates.outputs.has_updates == 'true'
+      run: |
+        IP="${{ steps.get_ip.outputs.instance_ip }}"
+        echo "Performing health check..."
+        
+        for i in {1..20}; do
+          if curl -f -s "http://$IP:8080" > /dev/null; then
+            echo "? Canvas is healthy after update"
+            break
+          fi
+          echo "Health check attempt $i/20..."
+          sleep 15
+        done
+        
+        if ! curl -f -s "http://$IP:8080" > /dev/null; then
+          echo "? Health check failed after update"
+          ssh ubuntu@$IP 'cd /opt/aurnova-lms && sudo docker compose logs --tail=100'
+          exit 1
+        fi
+        
+    - name: Update summary
+      run: |
+        IP="${{ steps.get_ip.outputs.instance_ip }}"
+        if [ "${{ steps.check_updates.outputs.has_updates }}" == "true" ]; then
+          echo "?? Application updated successfully!"
+          echo "Canvas LMS is available at: http://$IP:8080"
+        else
+          echo "?? No updates available. Application is up to date."
+        fi
