@@ -43,6 +43,13 @@ if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q
   err "Not authenticated. Run: gcloud auth login"; exit 1
 fi
 
+# Clear any existing project config to avoid conflicts
+CURRENT_PROJECT=$(gcloud config get-value project 2>/dev/null || echo "")
+if [[ -n "$CURRENT_PROJECT" && "$CURRENT_PROJECT" != "$PROJECT_ID" ]]; then
+  info "Clearing current project config: $CURRENT_PROJECT"
+  gcloud config unset project 2>/dev/null || true
+fi
+
 info "Creating project: $PROJECT_ID ($PROJECT_NAME)"
 CREATE_ARGS=("projects" "create" "$PROJECT_ID" "--name" "$PROJECT_NAME")
 if [[ -n "$ORG_ID" ]]; then
@@ -51,20 +58,39 @@ fi
 
 gcloud "${CREATE_ARGS[@]}"
 
-info "Setting project in gcloud config (before other operations)"
+info "Waiting for project to be fully created..."
+sleep 5
+
+info "Setting project in gcloud config"
 gcloud config set project "$PROJECT_ID"
 
-info "Linking billing account: $BILLING_ACCOUNT"
-gcloud beta billing projects link "$PROJECT_ID" \
-  --billing-account "$BILLING_ACCOUNT" \
-  --project "$PROJECT_ID" || {
-  err "Failed to link billing. You may need to enable billing API first."
-  err "Trying to enable billing API..."
-  gcloud services enable cloudbilling.googleapis.com --project "$PROJECT_ID" || true
-  sleep 2
-  gcloud beta billing projects link "$PROJECT_ID" \
-    --billing-account "$BILLING_ACCOUNT" \
-    --project "$PROJECT_ID"
+# Verify project is set correctly
+VERIFIED_PROJECT=$(gcloud config get-value project 2>/dev/null || echo "")
+if [[ "$VERIFIED_PROJECT" != "$PROJECT_ID" ]]; then
+  err "Failed to set project. Current: $VERIFIED_PROJECT, Expected: $PROJECT_ID"
+  exit 1
+fi
+
+info "Linking billing account: $BILLING_ACCOUNT to project: $PROJECT_ID"
+# Use full project format to avoid confusion
+gcloud beta billing projects link "projects/$PROJECT_ID" \
+  --billing-account "$BILLING_ACCOUNT" || {
+  err "Failed to link billing. Trying alternative method..."
+  # Alternative: use project number instead
+  PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)" 2>/dev/null || echo "")
+  if [[ -n "$PROJECT_NUMBER" ]]; then
+    info "Using project number: $PROJECT_NUMBER"
+    gcloud beta billing projects link "$PROJECT_NUMBER" \
+      --billing-account "$BILLING_ACCOUNT" || {
+      err "Billing link failed. You may need to link manually in Console:"
+      err "https://console.cloud.google.com/billing/linkedaccount?project=$PROJECT_ID"
+      exit 1
+    }
+  else
+    err "Could not get project number. Please link billing manually:"
+    err "https://console.cloud.google.com/billing/linkedaccount?project=$PROJECT_ID"
+    exit 1
+  fi
 }
 
 succ "Project created and selected: $PROJECT_ID"
